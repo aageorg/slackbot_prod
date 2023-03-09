@@ -1,0 +1,10 @@
+version: '3'
+services:
+  slackbot:
+    restart: always
+    image: golang:latest
+    build: .
+    volumes:
+        - ./config:/slackbot/config:ro
+    ports:
+        - 127.0.0.1:8080:8080

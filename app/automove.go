@@ -11,7 +11,7 @@ type Automove struct {
 	Trigger string `json:"trigger"`
 	From    string `json:"from_channel"`
 	To      string `json:"to_channel"`
-	User    User
+	User    User   `json:"-"`
 }
 
 func (a Automove) Do(message_id string) {
@@ -25,7 +25,9 @@ func (a Automove) Do(message_id string) {
 	slack.data["limit"] = "30"
 
 	thread, err := slack.GetThread()
-
+	if thread[0].Ts != thread[0].ThreadTs && thread[0].ThreadTs != "" {
+		return
+	}
 	if err != nil {
 		fmt.Println("cannot retrieve thread: " + err.Error())
 		return
@@ -57,7 +59,7 @@ func (a Automove) Do(message_id string) {
 		slack.data["text"] = u.RealName + " said:\n"
 		if thread[i].ThreadTs == thread[i].Ts {
 			slack.data["text"] += ">" + strings.ReplaceAll(thread[i].Text, "\n", "\n>")
-			slack.data["text"] += "\non " + t.Format("Monday, 02 January 2006 at 15:04:05")
+			slack.data["text"] += "\non " + t.Format("Monday, 02 January 2006 at 15:04")
 			ts, err = slack.PostMessage(false)
 			if err != nil {
 				fmt.Println("cannot post: " + err.Error())
@@ -66,7 +68,7 @@ func (a Automove) Do(message_id string) {
 			continue
 		}
 		slack.data["text"] += ">" + strings.ReplaceAll(thread[i].Text, "\n", "\n>")
-		slack.data["text"] += "\non " + t.Format("Monday, 02 January 2006 at 15:04:05")
+		slack.data["text"] += "\non " + t.Format("Monday, 02 January 2006 at 15:04")
 		slack.data["thread_ts"] = ts
 		ts, err = slack.PostMessage(false)
 		if err != nil {

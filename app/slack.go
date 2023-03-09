@@ -1,13 +1,11 @@
 package main
 
 import (
-	"boltdb/bolt"
 	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -164,8 +162,6 @@ func (sl SlackRequest) call() (*Response, error) {
 	req.Header.Set("Content-Type", sl.contentType)
 	if sl.auth == true {
 		if sl.user.AccessToken == "" {
-			var settings Database
-			settings.User = sl.user
 			sl.token = settings.getBotToken()
 		} else {
 			sl.token = sl.user.AccessToken
@@ -248,7 +244,7 @@ func (sl SlackRequest) DeleteMessage() error {
 	sl.method = "chat.delete"
 	sl.contentType = "application/json"
 	sl.auth = true
-	var settings Database
+	//	var settings Database
 	settings.User = sl.user
 	sl.user.AccessToken = settings.getUserToken()
 	sl.data["as_user"] = "true"
@@ -332,56 +328,4 @@ func (r Response) RetrieveAuthedUsers() []User {
 
 	}
 	return users
-}
-
-func (u User) GrantedThan(userid string) bool {
-
-	d, err := bolt.Open(DBName, 0644, &bolt.Options{ReadOnly: true})
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer d.Close()
-	var index1 int
-	var index2 int
-
-	d.View(func(tx *bolt.Tx) error {
-		index1 = 4
-		index2 = 4
-		team := tx.Bucket([]byte(u.TeamId))
-		if team != nil {
-			cred := team.Bucket([]byte("credentials"))
-			if cred != nil {
-				buckets := [3]string{"owners", "admins", "users"}
-				for i := 0; i < 3; i++ {
-					b := cred.Bucket([]byte(buckets[i]))
-					if b != nil {
-						u := b.Get([]byte(userid))
-						if u != nil {
-							if index1 > i {
-								index1 = i
-							}
-						}
-					}
-				}
-				for i := 0; i < 3; i++ {
-					b := cred.Bucket([]byte(buckets[i]))
-					if b != nil {
-						u := b.Get([]byte(u.Id))
-						if u != nil {
-							if index2 > i {
-								index2 = i
-							}
-						}
-					}
-				}
-			}
-		}
-		return nil
-	})
-	if index1 > index2 {
-		return true
-
-	}
-	return false
-
 }
