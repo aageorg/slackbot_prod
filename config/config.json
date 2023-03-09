@@ -5,6 +5,7 @@
 "slack_app_id":"ABCD...",
 "slack_bot_token":"xoxb-.....",
 "slack_user_token":"xoxp-.....",
+"slack_bot_url":"https://slackbot.example.com:8443",
 "automoves":
 [
     {"from_channel":"C3ABCD", "to_channel":"C1ABCD", "trigger":"white_check_mark"}

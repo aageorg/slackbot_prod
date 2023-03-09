@@ -197,7 +197,7 @@ func main() {
 
 	http.HandleFunc("/oAuth", OAuth)
 	http.HandleFunc("/showautomoves", ShowAutomoves)
-	http.Handle("/setup", http.RedirectHandler("https://slack.com/oauth/v2/authorize?user_scope=users:read,channels:read,channels:history,chat:write,reactions:write&client_id="+slackClientID+"&redirect_uri=https://choowie.appcat.cc:8444/oAuth", http.StatusSeeOther))
+	http.Handle("/setup", http.RedirectHandler("https://slack.com/oauth/v2/authorize?user_scope=users:read,channels:read,channels:history,chat:write,reactions:write&client_id="+slackClientID+"&redirect_uri="+settings.SlackBotURL+"/oAuth", http.StatusSeeOther))
 	http.HandleFunc("/", CallbackHandler)
 
 	log.Fatal(http.ListenAndServe(":8080", nil))

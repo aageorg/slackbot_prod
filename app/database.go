@@ -15,6 +15,7 @@ type Database struct {
 	SlackAppId        string     `json:"slack_app_id"`
 	SlackUserToken    string     `json:"slack_user_token"`
 	SlackBotToken     string     `json:"slack_bot_token"`
+	SlackBotURL       string     `json:"slack_bot_url"`
 	Automoves         []Automove `json:"automoves"`
 }
 
