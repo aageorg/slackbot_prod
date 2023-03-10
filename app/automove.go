@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -14,7 +14,7 @@ type Automove struct {
 	User    User   `json:"-"`
 }
 
-func (a Automove) Do(message_id string) {
+func (a Automove) Do(message_id string) error {
 
 	var slack SlackRequest
 
@@ -26,11 +26,10 @@ func (a Automove) Do(message_id string) {
 
 	thread, err := slack.GetThread()
 	if thread[0].Ts != thread[0].ThreadTs && thread[0].ThreadTs != "" {
-		return
+		return nil
 	}
 	if err != nil {
-		fmt.Println("cannot retrieve thread: " + err.Error())
-		return
+		return errors.New("Cannot retrieve thread: " + err.Error())
 	}
 	for _, message := range thread {
 		slack.data = make(map[string]string)
@@ -38,8 +37,7 @@ func (a Automove) Do(message_id string) {
 		slack.data["ts"] = message.Ts
 		err = slack.DeleteMessage()
 		if err != nil {
-			fmt.Println("cannot delete: " + message.Text + " " + err.Error())
-			return
+			return errors.New("Cannot delete: " + message.Text + " " + err.Error())
 		}
 	}
 	slack.data = make(map[string]string)
@@ -53,8 +51,7 @@ func (a Automove) Do(message_id string) {
 
 		u, err := slack.GetUser()
 		if err != nil {
-			fmt.Println("cannot get user: " + err.Error())
-			return
+			return errors.New("Cannot get user: " + err.Error())
 		}
 		slack.data["text"] = u.RealName + " said:\n"
 		if thread[i].ThreadTs == thread[i].Ts {
@@ -62,8 +59,7 @@ func (a Automove) Do(message_id string) {
 			slack.data["text"] += "\non " + t.Format("Monday, 02 January 2006 at 15:04")
 			ts, err = slack.PostMessage(false)
 			if err != nil {
-				fmt.Println("cannot post: " + err.Error())
-				return
+				return errors.New("Cannot post: " + err.Error())
 			}
 			continue
 		}
@@ -72,8 +68,8 @@ func (a Automove) Do(message_id string) {
 		slack.data["thread_ts"] = ts
 		ts, err = slack.PostMessage(false)
 		if err != nil {
-			fmt.Println("cannot post: " + err.Error())
-			return
+			return errors.New("cannot post: " + err.Error())
 		}
 	}
+	return nil
 }

@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -24,7 +25,7 @@ var certFile string
 var privkeyFile string
 
 var settings Database
-var waitReactionTo = make(map[string]chan string)
+//var waitReactionTo = make(map[string]chan string)
 
 const slackAPIUrl = "https://slack.com/api/"
 
@@ -138,7 +139,7 @@ func ShowAutomoves(res http.ResponseWriter, req *http.Request) {
 	}
 	_, err = slack.PostMessage(true)
 	if err != nil {
-		fmt.Println("Error on PostMessage: " + err.Error())
+		fmt.Fprintln(os.Stderr, "Error on PostMessage: " + err.Error())
 		return
 	}
 }
@@ -150,12 +151,14 @@ func CallbackHandler(res http.ResponseWriter, req *http.Request) {
 		log.Fatalln(err)
 	}
 	if len(req.Header["X-Slack-Signature"]) == 0 || !isVerified(req.Header, body, req.Header["X-Slack-Signature"][0]) {
+		fmt.Fprintln(os.Stderr, "Callback verification failed")
 		return
 	}
 
 	var callback Callback
 	err = json.Unmarshal(body, &callback)
 	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
 		return
 	}
 
@@ -167,17 +170,22 @@ func CallbackHandler(res http.ResponseWriter, req *http.Request) {
 	}
 
 	if callback.Event.Type == "reaction_added" {
-		ch, ok := waitReactionTo[callback.Event.Item.Ts]
+/*		ch, ok := waitReactionTo[callback.Event.Item.Ts]
 		if ok {
 			delete(waitReactionTo, callback.Event.Item.Ts)
 			ch <- callback.Event.Item.Channel + "|" + callback.Event.Reaction
 			return
 		}
-
+*/
+		fmt.Fprintln(os.Stderr, "Event callback received: reation "+callback.Event.Reaction+" on message "+ callback.Event.Item.Ts)
 		for _, move := range settings.Automoves {
-			if move.Trigger == callback.Event.Reaction && move.From == callback.Event.Item.Channel {
 
-				go move.Do(callback.Event.Item.Ts)
+			if move.Trigger == callback.Event.Reaction && move.From == callback.Event.Item.Channel {
+				fmt.Fprintln(os.Stderr, "Reaction "+callback.Event.Reaction+" is trigger. Start automove. ")
+				err = move.Do(callback.Event.Item.Ts)
+				if err!=nil {
+					fmt.Fprintln(os.Stderr, err.Error())
+				}
 			}
 		}
 	}
@@ -199,6 +207,8 @@ func main() {
 	http.HandleFunc("/showautomoves", ShowAutomoves)
 	http.Handle("/setup", http.RedirectHandler("https://slack.com/oauth/v2/authorize?user_scope=users:read,channels:read,channels:history,chat:write,reactions:write&client_id="+slackClientID+"&redirect_uri="+settings.SlackBotURL+"/oAuth", http.StatusSeeOther))
 	http.HandleFunc("/", CallbackHandler)
+
+	fmt.Fprintln(os.Stdout, "Slackbot started!")
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
 
