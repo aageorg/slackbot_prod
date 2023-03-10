@@ -68,7 +68,7 @@ func (db *Database) saveAutomoves() error {
 */
 
 func (db *Database) LoadConfig() error {
-	cfg, err := os.ReadFile("config/config.json")
+	cfg, err := os.ReadFile("config.json")
 	if err != nil {
 		return err
 	}
