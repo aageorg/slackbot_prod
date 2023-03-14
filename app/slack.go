@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -14,6 +13,7 @@ import (
 
 type SlackRequest struct {
 	method      string
+	source      string
 	reqmethod   string
 	user        User
 	auth        bool
@@ -56,7 +56,8 @@ type Callback struct {
 }
 
 type Profile struct {
-	ApiAppId string `json:"api_app_id"`
+	ApiAppId string `json:"api_app_id,omitempty"`
+	Image72  string `json:"image_72,omitempty"`
 }
 
 type User struct {
@@ -77,11 +78,39 @@ type Metadata struct {
 	NextCursor string `json:"next_cursor"`
 }
 
+type Element struct {
+	Type     string    `json:"type,omitempty"`
+	Text     string    `json:"text,omitempty"`
+	Emoji    bool      `json:"emoji,omitempty"`
+	ImageUrl string    `json:"image_url,omitempty"`
+	AltText  string    `json:"alt_text,omitempty"`
+	Elements []Element `json:"elements,omitempty"`
+}
+
+type Block struct {
+	Type     string    `json:"type"`
+	ImageUrl string    `json:"image_url,omitempty"`
+	AltText  string    `json:"alt_text,omitempty"`
+	Text     *Element  `json:"text,omitempty"`
+	Fields   []Element `json:"fields,omitempty"`
+	Elements []Element `json:"elements,omitempty"`
+}
+
+type File struct {
+	Title      string `json:"title"`
+	UrlPrivate string `json:"url_private"`
+	PermalinkPublic  string `json:"permalink_public"`
+	MimeType   string `json:"mimetype"`
+}
+
 type Message struct {
-	Ts       string `json:"ts"`
-	ThreadTs string `json:"thread_ts"`
-	User     string `json:"user"`
-	Text     string `json:"text"`
+	Ts          string      `json:"ts"`
+	ThreadTs    string      `json:"thread_ts"`
+	User        string      `json:"user"`
+	Text        string      `json:"text"`
+	Blocks      []Block     `json:"blocks,omitempty"`
+	Attachments interface{} `json:"attachments,omitempty"`
+	Files       []File      `json:"files,omitempty"`
 }
 type Response struct {
 	Ok          bool      `json:"ok"`
@@ -97,6 +126,7 @@ type Response struct {
 	AppId       string    `json:"app_id"`
 	Messages    []Message `json:"messages"`
 	Metadata    Metadata  `json:"response_metadata"`
+	File        []byte    `json:"-"`
 }
 
 func (sl SlackRequest) call() (*Response, error) {
@@ -146,16 +176,13 @@ func (sl SlackRequest) call() (*Response, error) {
 		}
 		json_data, err := json.Marshal(data)
 		if err != nil {
-			fmt.Println(err.Error())
 			return nil, err
 
 		}
 		reqbody = json_data
 	}
-
 	req, err := http.NewRequest(sl.reqmethod, slackAPIUrl+sl.method+querystring, bytes.NewBuffer(reqbody))
 	if err != nil {
-		fmt.Println(err.Error())
 		return nil, err
 
 	}
@@ -171,27 +198,22 @@ func (sl SlackRequest) call() (*Response, error) {
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		fmt.Println(err.Error())
 		return nil, err
 	}
 	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		fmt.Println(err.Error())
 		return nil, err
 	}
-
 	var response Response
 	err = json.Unmarshal(body, &response)
 	if err != nil {
-		fmt.Println(err.Error())
 		return nil, err
 	}
 	if response.Ok == false {
 		return nil, errors.New(response.Error)
 
 	}
-
 	return &response, nil
 }
 
@@ -199,7 +221,6 @@ func (sl SlackRequest) OauthV2Access() ([]User, error) {
 	sl.method = "oauth.v2.access"
 	result, err := sl.call()
 	if err != nil {
-		fmt.Println(err.Error())
 		return []User{}, err
 	}
 	return result.RetrieveAuthedUsers(), nil
@@ -213,12 +234,10 @@ func (sl SlackRequest) PostMessage(ephemeral bool) (string, error) {
 		sl.method = "chat.postMessage"
 
 	}
-
 	sl.contentType = "application/json"
 	sl.auth = true
 	response, err := sl.call()
 	if err != nil {
-		fmt.Println(err.Error())
 		return "", err
 	}
 
@@ -230,10 +249,8 @@ func (sl SlackRequest) UpdateMessage() error {
 	sl.method = "chat.update"
 	sl.contentType = "application/json"
 	sl.auth = true
-
 	_, err := sl.call()
 	if err != nil {
-		fmt.Println(err.Error())
 		return err
 	}
 	return nil
@@ -244,13 +261,11 @@ func (sl SlackRequest) DeleteMessage() error {
 	sl.method = "chat.delete"
 	sl.contentType = "application/json"
 	sl.auth = true
-	//	var settings Database
 	settings.User = sl.user
 	sl.user.AccessToken = settings.getUserToken()
 	sl.data["as_user"] = "true"
 	_, err := sl.call()
 	if err != nil {
-		fmt.Println(err.Error())
 		return err
 	}
 	return nil
@@ -264,7 +279,6 @@ func (sl SlackRequest) GetUser() (User, error) {
 	sl.auth = true
 	response, err := sl.call()
 	if err != nil {
-		fmt.Println(err.Error())
 		return user, err
 	}
 	return response.User, nil
@@ -278,15 +292,12 @@ func (sl SlackRequest) GetThread() ([]Message, error) {
 	sl.auth = true
 	response, err := sl.call()
 	if err != nil {
-		fmt.Println(err.Error())
 		return mm, err
 	}
 	collect := func(r *Response) []Message {
 		var m []Message
-
 		for i := 1; i < len(r.Messages); i++ {
 			m = append(m, r.Messages[i])
-
 		}
 		return m
 	}
@@ -310,7 +321,6 @@ func (sl SlackRequest) RetrieveMessage() (string, error) {
 	sl.auth = true
 	response, err := sl.call()
 	if err != nil {
-		fmt.Println(err.Error())
 		return "", err
 	}
 	return response.Messages[0].Text, nil
@@ -321,11 +331,9 @@ func (r Response) RetrieveAuthedUsers() []User {
 	var users []User
 	if len(r.AccessToken) > 0 {
 		users = append(users, User{Id: r.BotUserId, AccessToken: r.AccessToken, TokenType: r.TokenType})
-
 	}
 	if len(r.AuthedUser.AccessToken) > 0 {
 		users = append(users, User{Id: r.AuthedUser.Id, AccessToken: r.AuthedUser.AccessToken, TokenType: r.AuthedUser.TokenType})
-
 	}
 	return users
 }

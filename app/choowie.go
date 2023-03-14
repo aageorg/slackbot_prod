@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -25,7 +26,54 @@ var certFile string
 var privkeyFile string
 
 var settings Database
-//var waitReactionTo = make(map[string]chan string)
+var voting Voting
+
+type Voting struct {
+	votes map[string]int
+	mu    sync.Mutex
+}
+
+func makeVoting() Voting {
+	return Voting{
+		votes: make(map[string]int),
+	}
+}
+
+func (v *Voting) Vote(message_ts string) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if _, ok := v.votes[message_ts]; !ok {
+		v.votes[message_ts] = 0
+	}
+	v.votes[message_ts]++
+}
+
+func (v *Voting) UnVote(message_ts string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if _, ok := v.votes[message_ts]; !ok {
+		return fmt.Errorf("No voting for message %s was found", message_ts)
+	}
+	v.votes[message_ts]--
+	return nil
+}
+
+func (v *Voting) Result(message_ts string) int {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if _, ok := v.votes[message_ts]; ok {
+		return v.votes[message_ts]
+	}
+	return 0
+}
+
+func (v *Voting) Cancel(message_ts string) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if _, ok := v.votes[message_ts]; ok {
+		delete(v.votes, message_ts)
+	}
+}
 
 const slackAPIUrl = "https://slack.com/api/"
 
@@ -139,7 +187,7 @@ func ShowAutomoves(res http.ResponseWriter, req *http.Request) {
 	}
 	_, err = slack.PostMessage(true)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error on PostMessage: " + err.Error())
+		fmt.Fprintln(os.Stderr, "Error on PostMessage: "+err.Error())
 		return
 	}
 }
@@ -169,21 +217,32 @@ func CallbackHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if callback.Event.Type == "reaction_added" {
-/*		ch, ok := waitReactionTo[callback.Event.Item.Ts]
-		if ok {
-			delete(waitReactionTo, callback.Event.Item.Ts)
-			ch <- callback.Event.Item.Channel + "|" + callback.Event.Reaction
-			return
+	if callback.Event.Type == "reaction_removed" {
+		fmt.Fprintln(os.Stderr, "Event callback received: reaction "+callback.Event.Reaction+" was removed for  message "+callback.Event.Item.Ts)
+		for _, move := range settings.Automoves {
+			if move.Trigger == callback.Event.Reaction && move.From == callback.Event.Item.Channel && settings.IsPermittedUser(callback.Event.User) && settings.NecessaryVotes > 0 {
+				err = voting.UnVote(callback.Event.Item.Ts)
+				if err != nil {
+					fmt.Fprintln(os.Stderr, "Cannot unvote. "+err.Error())
+				}
+			}
 		}
-*/
-		fmt.Fprintln(os.Stderr, "Event callback received: reation "+callback.Event.Reaction+" on message "+ callback.Event.Item.Ts)
+	}
+
+	if callback.Event.Type == "reaction_added" {
+		fmt.Fprintln(os.Stderr, "Event callback received: reaction "+callback.Event.Reaction+" on message "+callback.Event.Item.Ts)
 		for _, move := range settings.Automoves {
 
-			if move.Trigger == callback.Event.Reaction && move.From == callback.Event.Item.Channel {
+			if move.Trigger == callback.Event.Reaction && move.From == callback.Event.Item.Channel && settings.IsPermittedUser(callback.Event.User) {
+				if settings.NecessaryVotes > 0 {
+					voting.Vote(callback.Event.Item.Ts)
+				}
+				if voting.Result(callback.Event.Item.Ts) < settings.NecessaryVotes {
+					return
+				}
 				fmt.Fprintln(os.Stderr, "Reaction "+callback.Event.Reaction+" is trigger. Start automove. ")
 				err = move.Do(callback.Event.Item.Ts)
-				if err!=nil {
+				if err != nil {
 					fmt.Fprintln(os.Stderr, err.Error())
 				}
 			}
@@ -207,9 +266,8 @@ func main() {
 	http.HandleFunc("/showautomoves", ShowAutomoves)
 	http.Handle("/setup", http.RedirectHandler("https://slack.com/oauth/v2/authorize?user_scope=users:read,channels:read,channels:history,chat:write,reactions:write&client_id="+slackClientID+"&redirect_uri="+settings.SlackBotURL+"/oAuth", http.StatusSeeOther))
 	http.HandleFunc("/", CallbackHandler)
-
-	fmt.Fprintln(os.Stdout, "Slackbot started!")
-
+	voting = makeVoting()
+	fmt.Fprintln(os.Stderr, "Slackbot started!")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 
 }

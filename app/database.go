@@ -16,7 +16,19 @@ type Database struct {
 	SlackUserToken    string     `json:"slack_user_token"`
 	SlackBotToken     string     `json:"slack_bot_token"`
 	SlackBotURL       string     `json:"slack_bot_url"`
+	NecessaryVotes    int        `json:"necessary_votes"`
+	NoRemove          bool       `json:"no_remove"`
+	PermittedUsers    []string   `json:"permitted_users"`
 	Automoves         []Automove `json:"automoves"`
+}
+
+func (db *Database) IsPermittedUser(user string) bool {
+	for _, u := range db.PermittedUsers {
+		if u == user {
+			return true
+		}
+	}
+	return false
 }
 
 /*

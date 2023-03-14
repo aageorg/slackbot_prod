@@ -1,0 +1,19 @@
+{
+"slack_sign_secret":"1234....",
+"slack_client_secret":"1234....",
+"slack_client_id":"1234.1234",
+"slack_app_id":"ABCD1",
+"slack_bot_token":"xoxb-...",
+"slack_user_token":"xoxp-...",
+"necessary_votes":0,
+"no_remove":true,
+"permitted_users":
+    [
+	"U...",
+	"U..."
+    ],
+"automoves":
+    [
+	{"from_channel":"C...", "to_channel":"C....", "trigger":"white_check_mark"}
+    ]
+}

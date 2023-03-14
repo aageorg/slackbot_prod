@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -31,13 +34,15 @@ func (a Automove) Do(message_id string) error {
 	if err != nil {
 		return errors.New("Cannot retrieve thread: " + err.Error())
 	}
-	for _, message := range thread {
-		slack.data = make(map[string]string)
-		slack.data["channel"] = a.From
-		slack.data["ts"] = message.Ts
-		err = slack.DeleteMessage()
-		if err != nil {
-			return errors.New("Cannot delete: " + message.Text + " " + err.Error())
+	if !settings.NoRemove {
+		for _, message := range thread {
+			slack.data = make(map[string]string)
+			slack.data["channel"] = a.From
+			slack.data["ts"] = message.Ts
+			err = slack.DeleteMessage()
+			if err != nil {
+				return errors.New("Cannot delete: " + message.Text + " " + err.Error())
+			}
 		}
 	}
 	slack.data = make(map[string]string)
@@ -51,23 +56,62 @@ func (a Automove) Do(message_id string) error {
 
 		u, err := slack.GetUser()
 		if err != nil {
-			return errors.New("Cannot get user: " + err.Error())
+			fmt.Fprintln(os.Stderr, "Cannot get user: "+err.Error())
 		}
-		slack.data["text"] = u.RealName + " said:\n"
-		if thread[i].ThreadTs == thread[i].Ts {
+		thread[i].Blocks = []Block{}
+
+		if u.RealName != "" {
+			slack.data["username"] = u.RealName
+			slack.data["icon_url"] = u.Profile.Image72
+		} else {
+			thread[i].Blocks = append(thread[i].Blocks, Block{Type: "context", Elements: []Element{{Type: "mrkdwn", Text: "Posted by <@" + thread[i].User + ">"}}})
+		}
+		if len(thread[i].Text) > 0 {
+			thread[i].Blocks = append(thread[i].Blocks, Block{Type: "section", Text: &Element{Type: "mrkdwn", Text: thread[i].Text}})
 			slack.data["text"] += ">" + strings.ReplaceAll(thread[i].Text, "\n", "\n>")
-			slack.data["text"] += "\non " + t.Format("Monday, 02 January 2006 at 15:04")
+			slack.data["text"] += "\non " + t.Format("Monday, January 2, 2006 at 15:04")
+		}
+		if thread[i].Attachments != nil {
+			if at, err := json.Marshal(thread[i].Attachments); err == nil {
+				slack.data["attachments"] = string(at)
+			} else {
+				fmt.Fprintln(os.Stderr, "Marshaling error: "+err.Error())
+			}
+		}
+		if len(thread[i].Files) > 0 {
+			for _, file := range thread[i].Files {
+				if strings.HasPrefix(file.MimeType, "image/") {
+//					thread[i].Blocks = append(thread[i].Blocks, Block{Type: "image", ImageUrl: file.PermalinkPublic, AltText: file.Title})
+//					thread[i].Blocks = append(thread[i].Blocks, Block{Type: "image", ImageUrl: "https://yourbasic.org/golang/stopwatch.png", AltText: file.Title})
+//				} else {
+					thread[i].Blocks = append(thread[i].Blocks, Block{Type: "section", Text: &Element{Type: "mrkdwn", Text: "<" + file.UrlPrivate + "|" + file.Title + ">"}})
+
+//				}
+//				slack.data["text"] = "<" + file.UrlPrivate + "|" + file.Title + ">\n"
+				}
+			}
+		}
+		if len(thread[i].Text) > 0 {
+			thread[i].Blocks = append(thread[i].Blocks, Block{Type: "context", Elements: []Element{{Type: "plain_text", Text: "on " + t.Format("Monday, January 2, 2006 at 15:04")}}})
+		}
+
+		if blocks, err := json.Marshal(thread[i].Blocks); err == nil && len(thread[i].Blocks) > 0 {
+			slack.data["blocks"] = string(blocks)
+		} else {
+			fmt.Fprintln(os.Stderr, "Blocks list is empty or JSON error on marshal message block")
+		}
+		if thread[i].ThreadTs == thread[i].Ts || thread[i].Ts == "" {
 			ts, err = slack.PostMessage(false)
 			if err != nil {
-				return errors.New("Cannot post: " + err.Error())
+				fmt.Fprintln(os.Stderr, "Blocks: "+slack.data["blocks"])
+				fmt.Fprintln(os.Stderr, "Cannot post: "+err.Error())
 			}
 			continue
 		}
-		slack.data["text"] += ">" + strings.ReplaceAll(thread[i].Text, "\n", "\n>")
-		slack.data["text"] += "\non " + t.Format("Monday, 02 January 2006 at 15:04")
 		slack.data["thread_ts"] = ts
 		ts, err = slack.PostMessage(false)
 		if err != nil {
+			fmt.Fprintln(os.Stderr, "Blocks: "+slack.data["blocks"])
 			return errors.New("cannot post: " + err.Error())
 		}
 	}
