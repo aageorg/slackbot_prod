@@ -308,7 +308,6 @@ func (sl SlackRequest) GetThread() ([]Message, error) {
 		mm = append(collect(response), mm...)
 	}
 	mm = append([]Message{response.Messages[0]}, mm...)
-
 	return mm, nil
 
 }
@@ -336,4 +335,20 @@ func (r Response) RetrieveAuthedUsers() []User {
 		users = append(users, User{Id: r.AuthedUser.Id, AccessToken: r.AuthedUser.AccessToken, TokenType: r.AuthedUser.TokenType})
 	}
 	return users
+}
+
+func GetFile(url string) (string, error) {
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+settings.getBotToken())
+	res, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+//	body, err := io.ReadAll(res.Body)
+	return "path", nil
 }
