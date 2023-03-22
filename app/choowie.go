@@ -193,6 +193,28 @@ func ShowAutomoves(res http.ResponseWriter, req *http.Request) {
 }
 
 func CallbackHandler(res http.ResponseWriter, req *http.Request) {
+
+	checkPrev := func(channel, reaction, ts string) {
+		var slack SlackRequest
+		slack.data = make(map[string]string)
+		slack.data["channel"] = channel
+		slack.data["latest"] = ts
+		m, err := slack.RetrieveMessage()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Cannot retrieve affected message: "+err.Error())
+			return
+		}
+		for _, r := range m.Reactions {
+			if r.Name == reaction {
+				for _, u := range r.Users {
+					if settings.IsPermittedUser(u) {
+						voting.Vote(ts)
+					}
+				}
+			}
+		}
+	}
+
 	defer req.Body.Close()
 	body, err := io.ReadAll(req.Body)
 	if err != nil {
@@ -221,9 +243,13 @@ func CallbackHandler(res http.ResponseWriter, req *http.Request) {
 		fmt.Fprintln(os.Stderr, "Event callback received: reaction "+callback.Event.Reaction+" was removed for  message "+callback.Event.Item.Ts)
 		for _, move := range settings.Automoves {
 			if move.Trigger == callback.Event.Reaction && move.From == callback.Event.Item.Channel && settings.IsPermittedUser(callback.Event.User) && settings.NecessaryVotes > 0 {
-				err = voting.UnVote(callback.Event.Item.Ts)
-				if err != nil {
-					fmt.Fprintln(os.Stderr, "Cannot unvote. "+err.Error())
+				if settings.NecessaryVotes > 0 {
+					voting.Vote(callback.Event.Item.Ts)
+					checkPrev(move.From, move.Trigger, callback.Event.Item.Ts)
+					err = voting.UnVote(callback.Event.Item.Ts)
+					if err != nil {
+						fmt.Fprintln(os.Stderr, "Cannot unvote. "+err.Error())
+					}
 				}
 			}
 		}
@@ -235,16 +261,19 @@ func CallbackHandler(res http.ResponseWriter, req *http.Request) {
 
 			if move.Trigger == callback.Event.Reaction && move.From == callback.Event.Item.Channel && settings.IsPermittedUser(callback.Event.User) {
 				if settings.NecessaryVotes > 0 {
+					checkPrev(move.From, move.Trigger, callback.Event.Item.Ts)
 					voting.Vote(callback.Event.Item.Ts)
 				}
 				if voting.Result(callback.Event.Item.Ts) < settings.NecessaryVotes {
 					return
 				}
-				fmt.Fprintln(os.Stderr, "Reaction "+callback.Event.Reaction+" is trigger. Start automove. ")
-				err = move.Do(callback.Event.Item.Ts)
-				if err != nil {
-					fmt.Fprintln(os.Stderr, err.Error())
-				}
+				fmt.Fprintln(os.Stderr, "Event ts: "+callback.Event.EventTs+": Reaction "+callback.Event.Reaction+" is trigger. Start automove. ")
+				go func() {
+					err = move.Do(callback.Event.Item.Ts)
+					if err != nil {
+						fmt.Fprintln(os.Stderr, err.Error())
+					}
+				}()
 			}
 		}
 	}

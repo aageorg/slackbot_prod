@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -20,6 +24,7 @@ type SlackRequest struct {
 	token       string
 	data        map[string]string
 	contentType string
+	file        string
 }
 
 type Item struct {
@@ -97,10 +102,23 @@ type Block struct {
 }
 
 type File struct {
-	Title      string `json:"title"`
-	UrlPrivate string `json:"url_private"`
-	PermalinkPublic  string `json:"permalink_public"`
-	MimeType   string `json:"mimetype"`
+	Id                 string `json:"id"`
+	Name               string `json:"name"`
+	Title              string `json:"title"`
+	Mode               string `json:"mode"`
+	FileAccess         string `json:"file_access"`
+	UrlPrivate         string `json:"url_private"`
+	UrlPrivateDownload string `json:"url_private_download"`
+	Permalink          string `json:"permalink"`
+	PermalinkPublic    string `json:"permalink_public"`
+	MimeType           string `json:"mimetype"`
+	Size               int    `json:"size,omitempty"`
+}
+
+type Reaction struct {
+	Name  string   `json:"name"`
+	Users []string `json:"users"`
+	Count int      `json:"count"`
 }
 
 type Message struct {
@@ -111,6 +129,7 @@ type Message struct {
 	Blocks      []Block     `json:"blocks,omitempty"`
 	Attachments interface{} `json:"attachments,omitempty"`
 	Files       []File      `json:"files,omitempty"`
+	Reactions   []Reaction  `json:"reactions"`
 }
 type Response struct {
 	Ok          bool      `json:"ok"`
@@ -126,10 +145,54 @@ type Response struct {
 	AppId       string    `json:"app_id"`
 	Messages    []Message `json:"messages"`
 	Metadata    Metadata  `json:"response_metadata"`
-	File        []byte    `json:"-"`
+	File        File      `json:"file"`
+	UploadURL   string    `json:"upload_url"`
+	FileId      string    `json:"file_id"`
+}
+
+func (sl SlackRequest) callv2(query string, body []byte) (*Response, error) {
+	client := &http.Client{}
+	req, err := http.NewRequest(sl.reqmethod, slackAPIUrl+sl.method+"?"+query, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+
+	}
+	req.Header.Set("Content-Type", sl.contentType)
+	if sl.auth == true {
+		if sl.user.AccessToken == "" {
+			sl.token = settings.getBotToken()
+		} else {
+			sl.token = sl.user.AccessToken
+		}
+		req.Header.Set("Authorization", "Bearer "+sl.token)
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	body, err = io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	var response Response
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		return nil, err
+	}
+	if response.Ok == false {
+		return nil, errors.New(response.Error)
+
+	}
+	return &response, nil
+
 }
 
 func (sl SlackRequest) call() (*Response, error) {
+	if sl.method == "" {
+		return nil, errors.New("API method not set")
+	}
+
 	client := &http.Client{}
 	data := url.Values{}
 	for p, v := range sl.data {
@@ -145,9 +208,6 @@ func (sl SlackRequest) call() (*Response, error) {
 		}
 		return strings.TrimSuffix(qstring, "&")
 	}
-	if sl.method == "" {
-		return nil, errors.New("API method not set")
-	}
 	if sl.reqmethod == "" {
 		sl.reqmethod = "POST"
 	}
@@ -157,10 +217,10 @@ func (sl SlackRequest) call() (*Response, error) {
 
 	if sl.contentType == "" && sl.reqmethod == "POST" {
 		sl.contentType = "application/x-www-form-urlencoded"
-		data := url.Values{}
-		for p, v := range sl.data {
-			data[p] = []string{v}
-		}
+		//		data := url.Values{}
+		//		for p, v := range sl.data {
+		//			data[p] = []string{v}
+		//		}
 
 		reqbody = []byte(data.Encode())
 	}
@@ -181,6 +241,31 @@ func (sl SlackRequest) call() (*Response, error) {
 		}
 		reqbody = json_data
 	}
+	if sl.contentType == "multipart/form-data" {
+		file, err := os.Open(sl.file)
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close()
+		body := &bytes.Buffer{}
+		writer := multipart.NewWriter(body)
+		part, err := writer.CreateFormFile("file", filepath.Base(sl.file))
+		if err != nil {
+			return nil, err
+		}
+		n, err := io.Copy(part, file)
+		fmt.Fprintf(os.Stderr, "copied bytes: %d\n", n)
+		for key, val := range sl.data {
+			_ = writer.WriteField(key, val)
+		}
+		err = writer.Close()
+		if err != nil {
+			return nil, err
+		}
+		sl.contentType = writer.FormDataContentType()
+		reqbody = body.Bytes()
+	}
+
 	req, err := http.NewRequest(sl.reqmethod, slackAPIUrl+sl.method+querystring, bytes.NewBuffer(reqbody))
 	if err != nil {
 		return nil, err
@@ -309,20 +394,112 @@ func (sl SlackRequest) GetThread() ([]Message, error) {
 	}
 	mm = append([]Message{response.Messages[0]}, mm...)
 	return mm, nil
-
 }
 
-func (sl SlackRequest) RetrieveMessage() (string, error) {
+
+func (sl SlackRequest) GetThreadLimit(limit int, channel string, thread_ts string) ([]Message, error) {
+	sl.method = "conversations.replies"
+	sl.contentType = "application/x-www-form-urlencoded"
+	sl.reqmethod = "GET"
+	sl.auth = true
+	v := url.Values{}
+	v.Add("limit", strconv.Itoa(limit))
+	v.Add("channel", channel)
+	v.Add("ts", thread_ts)
+	req := v.Encode()
+	res, err := sl.callv2(req, nil)
+	if err != nil {
+		return nil, err
+	}
+	return res.Messages, nil
+}
+
+
+func (sl SlackRequest) RetrieveMessage() (Message, error) {
 	sl.method = "conversations.history"
 	sl.reqmethod = "GET"
 	sl.data["limit"] = "1"
 	sl.data["inclusive"] = "true"
 	sl.auth = true
-	response, err := sl.call()
+	res, err := sl.call()
 	if err != nil {
-		return "", err
+		return Message{}, err
 	}
-	return response.Messages[0].Text, nil
+	return res.Messages[0], nil
+}
+
+
+func (sl SlackRequest) FileInfo(file_id string) (File, error) {
+	sl.method = "files.info"
+	sl.reqmethod = "GET"
+	sl.auth = true
+	v := url.Values{}
+	v.Add("file", file_id)
+	req := v.Encode()
+	res, err := sl.callv2(req, nil)
+	if err != nil {
+		return File{}, err
+	}
+	return res.File, nil
+}
+
+func (sl SlackRequest) GetUploadUrl(filename string, filesize int) (string, string, error) {
+	sl.method = "files.getUploadURLExternal"
+	sl.reqmethod = "GET"
+	sl.contentType = "application/x-www-form-urlencoded"
+	sl.auth = true
+	v := url.Values{}
+	v.Add("length", strconv.Itoa(filesize))
+	v.Add("filename", filename)
+	req := v.Encode()
+	res, err := sl.callv2(req, nil)
+	if err != nil {
+		return "", "", err
+	}
+	return res.UploadURL, res.FileId, nil
+}
+
+func (sl SlackRequest) CompleteUpload(to_channel string, comment string, thread_ts string, files []map[string]string) error {
+	sl.method = "files.completeUploadExternal"
+	sl.contentType = "application/json"
+	sl.reqmethod = "POST"
+	sl.auth = true
+	params := make(map[string]any)
+	params["files"] = files
+	params["channel_id"] = to_channel
+	params["thread_ts"] = thread_ts
+	params["initial_comment"] = comment
+	body, err := json.Marshal(params)
+	if err != nil {
+		return err
+	}
+	_, err = sl.callv2("", body)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (sl SlackRequest) AttachFiles(channel string, ts string, message string, files []string) error {
+	sl.method = "chat.update"
+	sl.contentType = "application/json"
+	sl.reqmethod = "POST"
+	sl.auth = true
+	params := make(map[string]any)
+	params["file_ids"] = files
+	params["as_user"] = true
+	params["text"] = message
+	params["channel"] = channel
+	params["ts"] = ts
+	body, err := json.Marshal(params)
+	if err != nil {
+		return err
+	}
+	_, err = sl.callv2("", body)
+	if err != nil {
+		return err
+	}
+	return nil
 
 }
 
@@ -337,18 +514,22 @@ func (r Response) RetrieveAuthedUsers() []User {
 	return users
 }
 
-func GetFile(url string) (string, error) {
+func ReloadFile(url_from string, url_to string, content_type string) error {
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", url_from, nil)
 	if err != nil {
-		return "", err
+		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+settings.getBotToken())
 	res, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer res.Body.Close()
-//	body, err := io.ReadAll(res.Body)
-	return "path", nil
+	res, err = http.Post(url_to, content_type, res.Body)
+	if err != nil {
+		return err
+	}
+	return nil
 }
+
