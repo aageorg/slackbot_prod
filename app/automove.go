@@ -40,10 +40,11 @@ func (a Automove) Do(message_id string) error {
 	var ts string
 	for i := 0; i < len(thread); i++ {
 		slack.data["user"] = thread[i].User
+		slack.data["unfurl_links"] = "false"
 		timestamp := strings.Split(thread[i].Ts, ".")
 		unixTime, _ := strconv.ParseInt(timestamp[0], 10, 64)
 		t := time.Unix(unixTime, 0)
-
+		
 		u, err := slack.GetUser()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Cannot get user: "+err.Error())
