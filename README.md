@@ -1,3 +1,10 @@
+# Choowie, The Slack Bot 
+
+Moves message threads from one channel to another on trigger reaction.
+
+### The manifest example:
+
+```
 display_information:
   name: triage-bot
 features:
@@ -37,3 +44,4 @@ settings:
   org_deploy_enabled: false
   socket_mode_enabled: false
   token_rotation_enabled: false
+```
