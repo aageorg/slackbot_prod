@@ -293,7 +293,7 @@ func main() {
 
 	http.HandleFunc("/oAuth", OAuth)
 	http.HandleFunc("/showautomoves", ShowAutomoves)
-	http.Handle("/setup", http.RedirectHandler("https://slack.com/oauth/v2/authorize?user_scope=users:read,channels:read,channels:history,chat:write,reactions:write&client_id="+slackClientID+"&redirect_uri="+settings.SlackBotURL+"/oAuth", http.StatusSeeOther))
+	http.Handle("/setup", http.RedirectHandler("https://slack.com/oauth/v2/authorize?user_scope=chat:write&client_id="+slackClientID+"&redirect_uri="+settings.SlackBotURL+"/oAuth", http.StatusSeeOther))
 	http.HandleFunc("/", CallbackHandler)
 	voting = makeVoting()
 	fmt.Fprintln(os.Stderr, "Slackbot started!")
