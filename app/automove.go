@@ -40,11 +40,10 @@ func (a Automove) Do(message_id string) error {
 	var ts string
 	for i := 0; i < len(thread); i++ {
 		slack.data["user"] = thread[i].User
-		slack.data["unfurl_links"] = "false"
 		timestamp := strings.Split(thread[i].Ts, ".")
 		unixTime, _ := strconv.ParseInt(timestamp[0], 10, 64)
 		t := time.Unix(unixTime, 0)
-		
+
 		u, err := slack.GetUser()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Cannot get user: "+err.Error())
@@ -63,11 +62,19 @@ func (a Automove) Do(message_id string) error {
 			slack.data["text"] += "\non " + t.Format("Monday, January 2, 2006 at 15:04")
 		}
 		if thread[i].Attachments != nil {
-			if at, err := json.Marshal(thread[i].Attachments); err == nil {
-				slack.data["attachments"] = string(at)
-			} else {
-				return errors.New("Error on marshalings attached object: "+err.Error())
+			for _, ant := range thread[i].Attachments {
+				if len(ant.Files) > 0 {
+					thread[i].Files = append(thread[i].Files, ant.Files...)
+				}
+				if len(ant.MessageBlocks) > 0 {
+					if at, err := json.Marshal(thread[i].Attachments); err == nil {
+						slack.data["attachments"] = string(at)
+					} else {
+						return errors.New("Error on marshalings attached object: " + err.Error())
+					}
+				}
 			}
+
 		}
 		if len(thread[i].Text) > 0 || len(thread[i].Files) > 0 {
 			var filestring string
@@ -98,12 +105,12 @@ func (a Automove) Do(message_id string) error {
 			for _, file := range thread[i].Files {
 				url, file_id, err := slack.GetUploadUrl(file.Name, file.Size)
 				if err != nil {
-					return errors.New("Cannot get upload url for "+file.Name+"("+strconv.Itoa(file.Size)+"): "+err.Error())
+					return errors.New("Cannot get upload url for " + file.Name + "(" + strconv.Itoa(file.Size) + "): " + err.Error())
 				}
 				filelist = append(filelist, map[string]string{"id": file_id, "title": file.Title})
 				err = ReloadFile(file.UrlPrivate, url, file.MimeType)
 				if err != nil {
-					return errors.New("Cannot reload file: "+err.Error())
+					return errors.New("Cannot reload file: " + err.Error())
 				}
 			}
 			if ts != "" && thread[i].Ts != thread[i].ThreadTs {
@@ -111,19 +118,19 @@ func (a Automove) Do(message_id string) error {
 			}
 			m_ts, err := slack.PostMessage(false)
 			if err != nil {
-				return errors.New("Cannot post the first message: "+err.Error())
+				return errors.New("Cannot post the first message: " + err.Error())
 			}
 			if ts == "" {
 				ts = m_ts
 			}
-			err = slack.CompleteUpload(a.To,  "Files from "+u.RealName, ts, filelist)
+			err = slack.CompleteUpload(a.To, "Attached files:", ts, filelist)
 			if err != nil {
 				return errors.New("Cannot complete upload: " + err.Error())
 			}
 			for {
-				msgs, err := slack.GetThreadLimit(1,a.To,ts)
+				msgs, err := slack.GetThreadLimit(1, a.To, ts)
 				if err != nil {
-					return errors.New("Cannot retrieve the last message from thread: "+err.Error())
+					return errors.New("Cannot retrieve the last message from thread: " + err.Error())
 				}
 				if len(msgs) == 2 && msgs[1].Ts != m_ts {
 					break

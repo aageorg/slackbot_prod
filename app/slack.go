@@ -121,15 +121,35 @@ type Reaction struct {
 	Count int      `json:"count"`
 }
 
+type Attachment struct {
+	Fallback      string        `json:"fallback"`
+	Color         string        `json:"color"`
+	Ptetext       string        `json:"pretext"`
+	AuthorName    string        `json:"author_name"`
+	AuthorLink    string        `json:"author_link"`
+	AuthorIcon    string        `json:"author_icon"`
+	Title         string        `json:"title"`
+	TitleLink     string        `json:"title_link"`
+	Text          string        `json:"text"`
+	Fields        []interface{} `json:"fields"`
+	ImageUrl      string        `json:"image_url"`
+	ThumbUrl      string        `json:"thumb_url"`
+	Footer        string        `json:"footer"`
+	FooterIcon    string        `json:"footer_icon"`
+	Ts            interface{}   `json:"ts"`
+	Files         []File        `json:"files"`
+	MessageBlocks []Block       `json:"message_blocks"`
+}
+
 type Message struct {
-	Ts          string      `json:"ts"`
-	ThreadTs    string      `json:"thread_ts"`
-	User        string      `json:"user"`
-	Text        string      `json:"text"`
-	Blocks      []Block     `json:"blocks,omitempty"`
-	Attachments interface{} `json:"attachments,omitempty"`
-	Files       []File      `json:"files,omitempty"`
-	Reactions   []Reaction  `json:"reactions"`
+	Ts          string       `json:"ts"`
+	ThreadTs    string       `json:"thread_ts"`
+	User        string       `json:"user"`
+	Text        string       `json:"text"`
+	Blocks      []Block      `json:"blocks,omitempty"`
+	Attachments []Attachment `json:"attachments,omitempty"`
+	Files       []File       `json:"files,omitempty"`
+	Reactions   []Reaction   `json:"reactions"`
 }
 type Response struct {
 	Ok          bool      `json:"ok"`
@@ -396,7 +416,6 @@ func (sl SlackRequest) GetThread() ([]Message, error) {
 	return mm, nil
 }
 
-
 func (sl SlackRequest) GetThreadLimit(limit int, channel string, thread_ts string) ([]Message, error) {
 	sl.method = "conversations.replies"
 	sl.contentType = "application/x-www-form-urlencoded"
@@ -414,7 +433,6 @@ func (sl SlackRequest) GetThreadLimit(limit int, channel string, thread_ts strin
 	return res.Messages, nil
 }
 
-
 func (sl SlackRequest) RetrieveMessage() (Message, error) {
 	sl.method = "conversations.history"
 	sl.reqmethod = "GET"
@@ -427,7 +445,6 @@ func (sl SlackRequest) RetrieveMessage() (Message, error) {
 	}
 	return res.Messages[0], nil
 }
-
 
 func (sl SlackRequest) FileInfo(file_id string) (File, error) {
 	sl.method = "files.info"
@@ -532,4 +549,3 @@ func ReloadFile(url_from string, url_to string, content_type string) error {
 	}
 	return nil
 }
-
