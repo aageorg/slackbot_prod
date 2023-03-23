@@ -122,23 +122,23 @@ type Reaction struct {
 }
 
 type Attachment struct {
-	Fallback      string        `json:"fallback"`
-	Color         string        `json:"color"`
-	Ptetext       string        `json:"pretext"`
-	AuthorName    string        `json:"author_name"`
-	AuthorLink    string        `json:"author_link"`
-	AuthorIcon    string        `json:"author_icon"`
-	Title         string        `json:"title"`
-	TitleLink     string        `json:"title_link"`
-	Text          string        `json:"text"`
-	Fields        []interface{} `json:"fields"`
-	ImageUrl      string        `json:"image_url"`
-	ThumbUrl      string        `json:"thumb_url"`
-	Footer        string        `json:"footer"`
-	FooterIcon    string        `json:"footer_icon"`
-	Ts            interface{}   `json:"ts"`
-	Files         []File        `json:"files"`
-	MessageBlocks []Block       `json:"message_blocks"`
+	Fallback      string        `json:"fallback,omitempty"`
+	Color         string        `json:"color,omitempty"`
+	Ptetext       string        `json:"pretext,omitempty"`
+	AuthorName    string        `json:"author_name,omitempty"`
+	AuthorLink    string        `json:"author_link,omitempty"`
+	AuthorIcon    string        `json:"author_icon,omitempty"`
+	Title         string        `json:"title,omitempty"`
+	TitleLink     string        `json:"title_link,omitempty"`
+	Text          string        `json:"text,omitempty"`
+	Fields        []interface{} `json:"fields,omitempty"`
+	ImageUrl      string        `json:"image_url,omitempty"`
+	ThumbUrl      string        `json:"thumb_url,omitempty"`
+	Footer        string        `json:"footer,omitempty"`
+	FooterIcon    string        `json:"footer_icon,omitempty"`
+	Ts            interface{}   `json:"ts,omitempty"`
+	Files         []File        `json:"files,omitempty"`
+	MessageBlocks []Block       `json:"message_blocks,omitempty"`
 }
 
 type Message struct {
