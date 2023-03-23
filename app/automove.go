@@ -86,6 +86,8 @@ func (a Automove) Do(message_id string) error {
 					}
 				}
 			}
+		} else {
+			delete(slack.data, "attachments")
 		}
 		if len(thread[i].Reactions) > 0 {
 			var elems []Element
