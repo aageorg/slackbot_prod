@@ -61,6 +61,18 @@ func (a Automove) Do(message_id string) error {
 			slack.data["text"] += ">" + strings.ReplaceAll(thread[i].Text, "\n", "\n>")
 			slack.data["text"] += "\non " + t.Format("Monday, January 2, 2006 at 15:04")
 		}
+
+		if len(thread[i].Text) > 0 || len(thread[i].Files) > 0 {
+			var filestring string
+			if len(thread[i].Files) > 0 {
+				filestring += "Uploaded file"
+				if len(thread[i].Files) > 1 {
+					filestring += "s"
+				}
+				filestring += "\n"
+			}
+			thread[i].Blocks = append(thread[i].Blocks, Block{Type: "context", Elements: []Element{{Type: "plain_text", Text: filestring + "on " + t.Format("Monday, January 2, 2006 at 15:04")}}})
+		}
 		if thread[i].Attachments != nil {
 			for _, ant := range thread[i].Attachments {
 				if len(ant.Files) > 0 {
@@ -74,18 +86,6 @@ func (a Automove) Do(message_id string) error {
 					}
 				}
 			}
-
-		}
-		if len(thread[i].Text) > 0 || len(thread[i].Files) > 0 {
-			var filestring string
-			if len(thread[i].Files) > 0 {
-				filestring += "Uploaded file"
-				if len(thread[i].Files) > 1 {
-					filestring += "s"
-				}
-				filestring += "\n"
-			}
-			thread[i].Blocks = append(thread[i].Blocks, Block{Type: "context", Elements: []Element{{Type: "plain_text", Text: filestring + "on " + t.Format("Monday, January 2, 2006 at 15:04")}}})
 		}
 		if len(thread[i].Reactions) > 0 {
 			var elems []Element
