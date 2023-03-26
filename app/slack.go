@@ -485,7 +485,9 @@ func (sl SlackRequest) CompleteUpload(to_channel string, comment string, thread_
 	params["files"] = files
 	params["channel_id"] = to_channel
 	params["thread_ts"] = thread_ts
-	params["initial_comment"] = comment
+	if comment != "" {
+		params["initial_comment"] = comment
+	}
 	body, err := json.Marshal(params)
 	if err != nil {
 		return err

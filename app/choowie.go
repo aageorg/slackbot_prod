@@ -70,9 +70,7 @@ func (v *Voting) Result(message_ts string) int {
 func (v *Voting) Cancel(message_ts string) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	if _, ok := v.votes[message_ts]; ok {
-		delete(v.votes, message_ts)
-	}
+	delete(v.votes, message_ts)
 }
 
 const slackAPIUrl = "https://slack.com/api/"
@@ -194,7 +192,10 @@ func ShowAutomoves(res http.ResponseWriter, req *http.Request) {
 
 func CallbackHandler(res http.ResponseWriter, req *http.Request) {
 
-	checkPrev := func(channel, reaction, ts string) {
+	reviewReactions := func(channel, reaction, ts string) {
+		if voting.Result(ts) > 0 {
+			return
+		}
 		var slack SlackRequest
 		slack.data = make(map[string]string)
 		slack.data["channel"] = channel
@@ -213,6 +214,7 @@ func CallbackHandler(res http.ResponseWriter, req *http.Request) {
 				}
 			}
 		}
+		voting.UnVote(ts)
 	}
 
 	defer req.Body.Close()
@@ -241,15 +243,15 @@ func CallbackHandler(res http.ResponseWriter, req *http.Request) {
 
 	if callback.Event.Type == "reaction_removed" {
 		fmt.Fprintln(os.Stderr, "Event callback received: reaction "+callback.Event.Reaction+" was removed for  message "+callback.Event.Item.Ts)
+		fmt.Fprintln(os.Stderr, "Necessary votes: "+strconv.Itoa(settings.NecessaryVotes)+", current votes counter: "+strconv.Itoa(voting.Result(callback.Event.Item.Ts)))
 		for _, move := range settings.Automoves {
 			if move.Trigger == callback.Event.Reaction && move.From == callback.Event.Item.Channel && settings.IsPermittedUser(callback.Event.User) && settings.NecessaryVotes > 0 {
-				if settings.NecessaryVotes > 0 {
-					voting.Vote(callback.Event.Item.Ts)
-					checkPrev(move.From, move.Trigger, callback.Event.Item.Ts)
-					err = voting.UnVote(callback.Event.Item.Ts)
-					if err != nil {
-						fmt.Fprintln(os.Stderr, "Cannot unvote. "+err.Error())
-					}
+				if settings.NecessaryVotes == 0 {
+					return
+				}
+				err = voting.UnVote(callback.Event.Item.Ts)
+				if err != nil {
+					fmt.Fprintln(os.Stderr, "Cannot unvote. "+err.Error())
 				}
 			}
 		}
@@ -260,14 +262,19 @@ func CallbackHandler(res http.ResponseWriter, req *http.Request) {
 		for _, move := range settings.Automoves {
 
 			if move.Trigger == callback.Event.Reaction && move.From == callback.Event.Item.Channel && settings.IsPermittedUser(callback.Event.User) {
+				fmt.Fprintln(os.Stderr, "Necessary votes: "+strconv.Itoa(settings.NecessaryVotes)+", current votes counter: "+strconv.Itoa(voting.Result(callback.Event.Item.Ts)))
+
 				if settings.NecessaryVotes > 0 {
-					checkPrev(move.From, move.Trigger, callback.Event.Item.Ts)
+					reviewReactions(move.From, move.Trigger, callback.Event.Item.Ts)
 					voting.Vote(callback.Event.Item.Ts)
+					fmt.Fprintln(os.Stderr, "After previous checking, current votes counter: "+strconv.Itoa(voting.Result(callback.Event.Item.Ts)))
+
 				}
 				if voting.Result(callback.Event.Item.Ts) < settings.NecessaryVotes {
 					return
 				}
-				fmt.Fprintln(os.Stderr, "Event ts: "+callback.Event.EventTs+": Reaction "+callback.Event.Reaction+" is trigger. Start automove. ")
+				fmt.Fprintln(os.Stderr, "Event ts: "+callback.Event.EventTs+": Reaction "+callback.Event.Reaction+" is trigger. Start automove.")
+				voting.Cancel(callback.Event.Item.Ts)
 				go func() {
 					err = move.Do(callback.Event.Item.Ts)
 					if err != nil {
