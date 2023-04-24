@@ -54,6 +54,8 @@ func (a Automove) Do(message_id string) error {
 			slack.data["username"] = u.RealName
 			slack.data["icon_url"] = u.Profile.Image72
 		} else {
+			delete(slack.data, "username")
+			delete(slack.data, "icon_url")
 			thread[i].Blocks = append(thread[i].Blocks, Block{Type: "context", Elements: []Element{{Type: "mrkdwn", Text: "Posted by <@" + thread[i].User + ">"}}})
 		}
 		if len(thread[i].Text) > 0 {
